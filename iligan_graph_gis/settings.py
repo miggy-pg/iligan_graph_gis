@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'import_export',
     'crispy_forms',
+    'leaflet',
     "crispy_bootstrap5",
     'users',
     'map',
@@ -82,7 +83,7 @@ WSGI_APPLICATION = 'iligan_graph_gis.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'iligan_graph_gis',
+        'NAME': 'iligan_graph',
         'USER': 'admin',
         'HOST': '127.0.0.1',
         'PASSWORD': 'admin',
@@ -137,3 +138,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 
 CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+LEAFLET_CONFIG = {
+    'DEFAULT_CENTER': (8.240133, 124.255607),
+    'DEFAULT_ZOOM': 16,
+    'MAX_ZOOM': 20,
+    'MIN_ZOOM': 3,
+    'SCALE': 'both',
+}
+
+SERIALIZATION_MODULES = {
+    "geojson": "django.contrib.gis.serializers.geojson", 
+ }
