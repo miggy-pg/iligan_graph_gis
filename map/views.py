@@ -65,21 +65,23 @@ def index(request):
 
         marker_est_start = Marker.objects.filter(id=marker_start).values_list('latitude', 'longitude')
         marker_est_dest = Marker.objects.filter(id=marker_destination).values_list('latitude', 'longitude')
-        
+        print('marker_est_start', marker_est_start)
+        print('marker_est_dest', marker_est_dest)
         intersections = Marker.objects.filter(type="intersection").values_list('id', 'latitude', 'longitude')
 
         marker_intersec_start = get_nearest_point(marker_est_start[0], intersections)
         marker_intersec_dest = get_nearest_point(marker_est_dest[0], intersections)
-        
+        print(marker_intersec_start)
+        print(marker_intersec_dest)
         routes = iligangraph(nx.DiGraph(), marker_intersec_start, marker_intersec_dest)
         
         all_routes = []
         for route in routes:
-            route[0].insert(0, int(marker_start))
-            route[0].append(int(marker_destination))
+            route[1].insert(0, int(marker_start))
+            route[1].append(int(marker_destination))
             route_with_estab = []
             preserved = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(route[0])])
-            route_inter_markers = Marker.objects.filter(type__in=["intersection", "start_dest"], pk__in=route[0]).values("id", "latitude", "longitude").order_by(preserved)
+            route_inter_markers = Marker.objects.filter(type="intersection", pk__in=route[0]).values("id", "latitude", "longitude").order_by(preserved)
             
             for marker in route_inter_markers:
                 if 'latitude' or 'longitude' in marker.keys():
@@ -88,8 +90,7 @@ def index(request):
 
                     marker['lng'] = marker["longitude"]
                     del marker["longitude"]
-                
-            route_estab = Marker.objects.filter(type="establishment", pk__in=route[1]).values("id", "latitude", "longitude", 'name')
+            route_estab = Marker.objects.filter(type__in=["establishment", "start_dest"], pk__in=route[1]).values("id", "latitude", "longitude", 'name', 'category_level')
             for marker in route_estab:
                 if 'latitude' or 'longitude' in marker.keys():
                     marker['lat'] = marker["latitude"]
@@ -99,7 +100,6 @@ def index(request):
                     del marker["longitude"]
             route_with_estab = [list(route_inter_markers), list(route_estab)]
             all_routes.append(list(route_with_estab))
-        
         try:
             dataset = Dataset()
             import_markers = request.FILES['my_file']
@@ -128,7 +128,6 @@ def index(request):
     return render(request, "index.html", context)
 
 
-@login_required(login_url="login")
 def modifymarker_view(request):
     if request.method == "POST":
 
@@ -136,7 +135,7 @@ def modifymarker_view(request):
         name = request.POST["name"]
 
         if modifyType == "" or name == "":
-            return render(request, "error.html", {"error_name":"Forcing to bypass security, you are not allowed to do that"})
+            return render(request, "error.html", {"error_name":"No means no! You can't do that."})
 
         markers = Marker.objects.all()
 
@@ -167,9 +166,8 @@ def modifymarker_view(request):
 
             if isANumber:
                 Marker.objects.create(name=name, longitude=longitude, latitude=latitude)
-                print(f"Adding Marker:{name} at Long: {longitude} and Lat: {latitude}")
             else:
-                return render(request, "error.html", {"error_name":"Forcing to bypass security, Invalid value for Longitude and Latitude"})
+                return render(request, "error.html", {"error_name":"Invalid value for Longitude and Latitude"})
         elif modifyType == "remove":
             if marker == None:
                 return render(request, "error.html", {"error_name":"Marker Name doesn't exist, check your available markers before attempting to remove."})
@@ -177,11 +175,11 @@ def modifymarker_view(request):
                 print(f"Removing {name}")
                 marker.delete()
         else:
-            return render(request, "error.html", {"error_name":"Performing an unidentified action"})
+            return render(request, "error.html", {"error_name":"Oops! You finally found me. - Error"})
 
-        return redirect("index")
+        return redirect("/map")
     else:
-        return render(request, "error.html", {"error_name":"Performing an unidentified action"})
+        return render(request, "error.html", {"error_name":"Oops! You finally found me. - Error"})
     
 def markers(request):
     coords = []
@@ -225,8 +223,8 @@ def nodes_within_radius_along_path(graph, node1, node2, radius=2):
 
 def iligangraph(graph, start, end):
     # 1ST COLUMN
-    graph.add_edge(261, 262, weight=89)
     graph.add_node(261, pos=(1,42)) #int:1
+    graph.add_edge(261, 262, weight=89)
     graph.add_edge(261, 455, weight=93)
 
 
@@ -1444,13 +1442,14 @@ def iligangraph(graph, start, end):
         routes.append(route)
 
     routes = [list(route) for route in set(tuple(route) for route in routes)]
-
     route_with_establishments = []
+    print(routes)
     for route in routes:
         edge_establishments = []
         for node in range(len(route)):
             try:
                 get_establishment = nodes_within_radius_along_path(graph, route[node], route[node+1])
+                
                 if route[node] or route[node+1] in route[node].keys():
                     get_establishment.remove(route[node])
                     get_establishment.remove(route[node+1])
@@ -1461,5 +1460,5 @@ def iligangraph(graph, start, end):
         djik_estab = list(set(djik_estab))
         join_route_estab = [route, djik_estab]
         route_with_establishments.append(join_route_estab)
-
+    
     return route_with_establishments

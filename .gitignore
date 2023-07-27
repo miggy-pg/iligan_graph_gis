@@ -1,1 +1,6 @@
+__pycache__
+map/migrations/__pycache__
 venv/
+iligan_graph_gis/__pycache__
+cache
+.vscode

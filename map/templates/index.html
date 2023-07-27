@@ -83,6 +83,7 @@
                             <br>
                             <br>
                             <form class="form-control" action="modifymarker/" method="POST" onSubmit="return ValidateMarkerSubmittion()"> {% csrf_token %}
+                                <input type="hidden" name="modifyType" value="add">
                                 {% csrf_token %}
                                 <label>You also have the option to manually assign the markers.</label>
                                 {{ upload_form|crispy }}
@@ -123,19 +124,20 @@
             const jsonMarkers = JSON.parse(document.getElementById('jsonMarkers').textContent); 
             const possible_paths = document.getElementById('possible_paths')  
             const route_establishments = document.getElementById('route_establishments')  
-            console.log(route_establishments);
+            
             let objectjsonMarkers = eval('(' + jsonMarkers + ')');
             const arr_test = objectjsonMarkers.map(route => {directions.push(route)})
             // Iterate over each array in the directions variable
             for (var i = 0; i < directions.length; i++) {
+                
                 var button_list = document.createElement("li"); // Create a button
-                // let btn = document.createElement('button');
                 button_list.textContent = `Route ${i+1}`; // Button text
                 button_list.setAttribute('id', `${i}`);
                 button_list.style.cursor = 'pointer';
                 
                 var establishment_container = document.createElement('div');
-                establishment_container.textContent = `${directions[i][1].map(marker => marker.name)}`
+                const unique_estab = directions[i][1].map(marker => marker.name)
+                establishment_container.textContent = `${[...new Set(unique_estab)]}`
                 establishment_container.style.color = "black";
                 establishment_container.style.width = '600px';
                 establishment_container.style.textAlign = 'left';
@@ -147,7 +149,7 @@
             }
             var buttons = possible_paths.getElementsByTagName('li');
             var divs = route_establishments.getElementsByTagName('div');
-
+            console.log(buttons.length);
             var polylineLayer = null;
             var markersLayer = null
             var currEstabBlock = null
@@ -164,12 +166,13 @@
                     
                     var curr_estab = divs[ev.target.id]
                     curr_estab.style.display = "block"
-                    console.log(curr_estab);
+                    // Establishments
                     directions[ev.target.id][1].forEach(marker => {
                         var latlngs = L.marker([marker["lat"], marker["lng"]]).addTo(markers)
-                        // latlngs.bindPopup(marker["id"].toString()).openPopup(); 
+                        latlngs.bindPopup(marker["category_level"].toString()).openPopup(); 
                     })
 
+                    // Routes
                     // Create a new polyline layer using the provided coordinates
                     var polyline = L.polyline(directions[ev.target.id][0]).addTo(map);
                     
