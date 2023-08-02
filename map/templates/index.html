@@ -121,7 +121,7 @@
             var establishments = []
             
             // Map the edge of the graph
-            const jsonMarkers = JSON.parse(document.getElementById('jsonMarkers').textContent); 
+            const jsonMarkers = JSON.parse(document.getElementById('jsonMarkers').textContent);
             const possible_paths = document.getElementById('possible_paths')  
             const route_establishments = document.getElementById('route_establishments')  
             
@@ -154,7 +154,7 @@
             var markersLayer = null
             var currEstabBlock = null
             for (var i = 0; i < buttons.length; i++) {
-
+                console.log(buttons[i]);
                 buttons[i].addEventListener('click', function(ev) {
                     var markers = L.layerGroup().addTo(map);
 
@@ -163,7 +163,6 @@
                         map.removeLayer(markersLayer)
                         currEstabBlock.style.display = "none"
                     }
-                    
                     var curr_estab = divs[ev.target.id]
                     curr_estab.style.display = "block"
                     // Establishments

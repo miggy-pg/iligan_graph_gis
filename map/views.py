@@ -60,67 +60,70 @@ def index(request):
         upload_form = UploadMarker(request.POST)
         form = MarkerForm(request.POST)
 
-        marker_start = request.POST['marker_start']
-        marker_destination = request.POST['marker_destination']
-
-        marker_est_start = Marker.objects.filter(id=marker_start).values_list('latitude', 'longitude')
-        marker_est_dest = Marker.objects.filter(id=marker_destination).values_list('latitude', 'longitude')
-        print('marker_est_start', marker_est_start)
-        print('marker_est_dest', marker_est_dest)
-        intersections = Marker.objects.filter(type="intersection").values_list('id', 'latitude', 'longitude')
-
-        marker_intersec_start = get_nearest_point(marker_est_start[0], intersections)
-        marker_intersec_dest = get_nearest_point(marker_est_dest[0], intersections)
-        print(marker_intersec_start)
-        print(marker_intersec_dest)
-        routes = iligangraph(nx.DiGraph(), marker_intersec_start, marker_intersec_dest)
-        
-        all_routes = []
-        for route in routes:
-            route[1].insert(0, int(marker_start))
-            route[1].append(int(marker_destination))
-            route_with_estab = []
-            preserved = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(route[0])])
-            route_inter_markers = Marker.objects.filter(type="intersection", pk__in=route[0]).values("id", "latitude", "longitude").order_by(preserved)
+        if "marker_start" and "marker_destination" in request.POST.keys():
+            # marker_start = request.POST['marker_start']
+            # marker_destination = request.POST['marker_destination']
             
-            for marker in route_inter_markers:
-                if 'latitude' or 'longitude' in marker.keys():
-                    marker['lat'] = marker["latitude"]
-                    del marker["latitude"]
+            marker_start, marker_destination = 261, 262
 
-                    marker['lng'] = marker["longitude"]
-                    del marker["longitude"]
-            route_estab = Marker.objects.filter(type__in=["establishment", "start_dest"], pk__in=route[1]).values("id", "latitude", "longitude", 'name', 'category_level')
-            for marker in route_estab:
-                if 'latitude' or 'longitude' in marker.keys():
-                    marker['lat'] = marker["latitude"]
-                    del marker["latitude"]
+            marker_est_start = Marker.objects.filter(id=marker_start).values_list('latitude', 'longitude')
+            marker_est_dest = Marker.objects.filter(id=marker_destination).values_list('latitude', 'longitude')
+            print('marker_est_start', marker_est_start)
+            print('marker_est_dest', marker_est_dest)
+            intersections = Marker.objects.filter(type="intersection").values_list('id', 'latitude', 'longitude')
+            marker_intersec_start = get_nearest_point(marker_est_start[0], intersections)
+            marker_intersec_dest = get_nearest_point(marker_est_dest[0], intersections)
+            
+            routes = iligangraph(nx.DiGraph(), marker_intersec_start, marker_intersec_dest)
+            all_routes = []
+            for route in routes:
+                route[1].insert(0, int(marker_start))
+                route[1].append(int(marker_destination))
+                route_with_estab = []
+                preserved = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(route[0])])
+                route_inter_markers = Marker.objects.filter(type="intersection", pk__in=route[0]).values("id", "latitude", "longitude").order_by(preserved)
+                for marker in route_inter_markers:
+                    if 'latitude' or 'longitude' in marker.keys():
+                        marker['lat'] = marker["latitude"]
+                        del marker["latitude"]
 
-                    marker['lng'] = marker["longitude"]
-                    del marker["longitude"]
-            route_with_estab = [list(route_inter_markers), list(route_estab)]
-            all_routes.append(list(route_with_estab))
-        try:
-            dataset = Dataset()
-            import_markers = request.FILES['my_file']
-            imported_data = dataset.load(import_markers.read(), format="xlsx")
+                        marker['lng'] = marker["longitude"]
+                        del marker["longitude"]
+                route_estab = Marker.objects.filter(type__in=["establishment", "start_dest"], pk__in=route[1]).values("id", "latitude", "longitude", 'name', 'category_level')
+                for marker in route_estab:
+                    if 'latitude' or 'longitude' in marker.keys():
+                        marker['lat'] = marker["latitude"]
+                        del marker["latitude"]
+
+                        marker['lng'] = marker["longitude"]
+                        del marker["longitude"]
+                route_with_estab = [list(route_inter_markers), list(route_estab)]
+                all_routes.append(list(route_with_estab))
+            context["jsonMarkers"] = json.dumps(list(all_routes))
+
+        else:  
             try:
-                for data in imported_data:
-                    value = Marker(
-                        data[0],
-                        data[1],
-                        data[2],
-                        data[3],
-                        data[4],
-                    )
-                    value.save()
-            except IntegrityError as e:
-                messages.add_message(request, messages.INFO, "ERROR: Imported data contain empty rows.")
+                dataset = Dataset()
+                import_markers = request.FILES['my_file']
+                imported_data = dataset.load(import_markers.read(), format="xlsx")
+                try:
+                    for data in imported_data:
+                        value = Marker(
+                            data[0],
+                            data[1],
+                            data[2],
+                            data[3],
+                            data[4],
+                        )
+                        break
+                        value.save()
+                except IntegrityError as e:
+                    messages.add_message(request, messages.INFO, "ERROR: Imported data contain empty rows.")
+                    
+            
+            except MultiValueDictKeyError as e:
+                pass
         
-        except MultiValueDictKeyError as e:
-            pass
-        
-        context["jsonMarkers"] = json.dumps(list(all_routes))
 
     context["form"] = form
     context["upload_form"] = upload_form
@@ -194,7 +197,7 @@ def markers(request):
     markersNodes = serialize('geojson', Marker.objects.filter(type="intersection"), geometry_field="point")
     return HttpResponse(markersNodes, content_type='json')
 
-def nodes_within_radius_along_path(graph, node1, node2, radius=2):
+def nodes_within_radius_along_path(graph, node1, node2, radius=1.5):
     # Get the x, y coordinates of the two nodes
     x1, y1 = graph.nodes[node1].get('pos')[0], graph.nodes[node1].get('pos')[1]
     x2, y2 = graph.nodes[node2].get('pos')[0], graph.nodes[node2].get('pos')[1]
@@ -218,188 +221,189 @@ def nodes_within_radius_along_path(graph, node1, node2, radius=2):
                 # Check if the distance is within the radius
                 if distance <= radius:
                     nodes_within_radius.append(node[0])
+    
     return nodes_within_radius
 
 
 def iligangraph(graph, start, end):
     # 1ST COLUMN
     graph.add_node(261, pos=(1,42)) #int:1
-    graph.add_edge(261, 262, weight=89)
-    graph.add_edge(261, 455, weight=93)
+    graph.add_edge(261, 262, weight=95)
+    graph.add_edge(261, 455, weight=94)
 
 
     # 2ND COLUMN
     graph.add_node(455, pos=(2,50)) #int:118
-    graph.add_edge(455, 261, weight=93)
-    graph.add_edge(455, 456, weight=96)
+    graph.add_edge(455, 261, weight=94)
+    graph.add_edge(455, 456, weight=100)
 
     graph.add_node(262, pos=(2,41)) #int:2
-    graph.add_edge(262, 261, weight=89)
-    graph.add_edge(262, 263, weight=96)
-    graph.add_edge(262, 404, weight=93)
+    graph.add_edge(262, 261, weight=95)
+    graph.add_edge(262, 263, weight=98)
+    graph.add_edge(262, 404, weight=85)
 
     # 3RD COLUMN
     graph.add_node(263, pos=(3,40)) #int:3
-    graph.add_edge(263, 262, weight=96)
-    graph.add_edge(263, 264, weight=95)
-    graph.add_edge(263, 405, weight=92)
+    graph.add_edge(263, 262, weight=98)
+    graph.add_edge(263, 264, weight=91)
+    graph.add_edge(263, 405, weight=88)
 
     graph.add_node(456, pos=(3,53)) #int:132
-    graph.add_edge(456, 403, weight=95)
-    graph.add_edge(456, 455, weight=96)
+    graph.add_edge(456, 403, weight=100)
+    graph.add_edge(456, 455, weight=100)
 
     # 4TH COLUMN
 
     # 5TH COLUMN
     graph.add_node(403, pos=(5,54)) #int:143
-    graph.add_edge(403, 456, weight=95)
+    graph.add_edge(403, 456, weight=100)
     graph.add_edge(403, 398, weight=100) #to recheck(added temporary weight = 0)
-    graph.add_edge(403, 404, weight=89)
+    graph.add_edge(403, 404, weight=96)
 
     # 6TH COLUMN
     graph.add_node(404, pos=(6,48)) #int:144
-    graph.add_edge(404, 262, weight=93)
-    graph.add_edge(404, 403, weight=89)
-    graph.add_edge(404, 405, weight=94)
+    graph.add_edge(404, 262, weight=85)
+    graph.add_edge(404, 403, weight=96)
+    graph.add_edge(404, 405, weight=97)
 
     # 7TH COLUMN
     graph.add_node(405, pos=(7,44)) #int:145
-    graph.add_edge(405, 263, weight=92)
-    graph.add_edge(405, 400, weight=88)
-    graph.add_edge(405, 404, weight=94)
-    graph.add_edge(405, 406, weight=92)
+    graph.add_edge(405, 400, weight=97)
+    graph.add_edge(405, 404, weight=100)
+    graph.add_edge(405, 406, weight=100)
+    graph.add_edge(405, 263, weight=100)
 
     # 8TH COLUMN
     graph.add_node(406, pos=(8,41)) #int:146
-    graph.add_edge(406, 264, weight=98)
-    graph.add_edge(406, 401, weight=97)
-    graph.add_edge(406, 405, weight=92)
+    graph.add_edge(406, 264, weight=100)
+    graph.add_edge(406, 401, weight=100)
+    graph.add_edge(406, 405, weight=100)
 
     graph.add_node(264, pos=(8,34)) #int:4
-    graph.add_edge(264, 263, weight=95)
-    graph.add_edge(264, 265, weight=100)  #to recheck(added temporary weight = 0)
-    graph.add_edge(264, 406, weight=98)
+    graph.add_edge(264, 263, weight=100)
+    graph.add_edge(264, 265, weight=100)
+    graph.add_edge(264, 406, weight=100)
 
     # 9TH COLUMN
     graph.add_node(398, pos=(9,56)) #int:138
-    graph.add_edge(398, 330, weight=84)
-    graph.add_edge(398, 399, weight=95)
-    graph.add_edge(398, 403, weight=95)
+    graph.add_edge(398, 330, weight=100)
+    graph.add_edge(398, 399, weight=98)
+    graph.add_edge(398, 403, weight=100)
 
     # 10TH COLUMN
     graph.add_node(265, pos=(10,33)) #int:5
-    graph.add_edge(265, 264, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(265, 402, weight=98)
-    graph.add_edge(265, 407, weight=96)
+    graph.add_edge(265, 264, weight=100)
+    graph.add_edge(265, 402, weight=100)
+    graph.add_edge(265, 407, weight=100)
 
     graph.add_node(399, pos=(10,52)) #int:139
-    graph.add_edge(399, 331, weight=98)
-    graph.add_edge(399, 398, weight=95)
-    graph.add_edge(399, 400, weight=90)
+    graph.add_edge(399, 331, weight=99)
+    graph.add_edge(399, 398, weight=98)
+    graph.add_edge(399, 400, weight=96)
 
     # 11TH COLUMN
     graph.add_node(400, pos=(11,46)) #int:140
-    graph.add_edge(400, 332, weight=91)
-    graph.add_edge(400, 399, weight=90)
-    graph.add_edge(400, 401, weight=99)
-    graph.add_edge(400, 405, weight=88)
+    graph.add_edge(400, 332, weight=94)
+    graph.add_edge(400, 399, weight=96)
+    graph.add_edge(400, 401, weight=95)
+    graph.add_edge(400, 405, weight=97)
 
     # 12TH COLUMN
     graph.add_node(401, pos=(12,43)) #int:141
-    graph.add_edge(401, 400, weight=93)
-    graph.add_edge(401, 406, weight=93)
-    graph.add_edge(401, 333, weight=93)
-    graph.add_edge(401, 407, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(401, 400, weight=95)
+    graph.add_edge(401, 406, weight=95)
+    graph.add_edge(401, 333, weight=92)
+    graph.add_edge(401, 407, weight=100)
 
     # 13TH COLUMN
     graph.add_node(407, pos=(13,41)) #int:147
-    graph.add_edge(407, 401, weight=98)
-    graph.add_edge(407, 265, weight=96)
-    graph.add_edge(407, 335, weight=95)
+    graph.add_edge(407, 401, weight=100)
+    graph.add_edge(407, 265, weight=100)
+    graph.add_edge(407, 335, weight=94)
 
     graph.add_node(402, pos=(13,31)) #int:142
-    graph.add_edge(402, 265, weight=98)
-    graph.add_edge(402, 268, weight=98)
+    graph.add_edge(402, 265, weight=100)
+    graph.add_edge(402, 268, weight=100)
 
     # 14TH COLUMN
     graph.add_node(268, pos=(14,31)) #int:8
-    graph.add_edge(268, 266, weight=98)
-    graph.add_edge(268, 402, weight=98)
+    graph.add_edge(268, 266, weight=100)
+    graph.add_edge(268, 402, weight=100)
 
     # 15TH COLUMN
     graph.add_node(266, pos=(15,30)) #int:6
-    graph.add_edge(266, 267, weight=98)
-    graph.add_edge(266, 268, weight=98)
+    graph.add_edge(266, 267, weight=100)
+    graph.add_edge(266, 268, weight=100)
 
     # 16TH COLUMN
     graph.add_node(330, pos=(16,61)) #int:70
-    graph.add_edge(330, 324, weight=90)
-    graph.add_edge(330, 331, weight=93)
-    graph.add_edge(330, 398, weight=84)
+    graph.add_edge(330, 324, weight=95)
+    graph.add_edge(330, 331, weight=94)
+    graph.add_edge(330, 398, weight=95)
 
     graph.add_node(267, pos=(16,32)) #int:7
-    graph.add_edge(267, 266, weight=98)
+    graph.add_edge(267, 266, weight=100)
     graph.add_edge(267, 269, weight=97)
-    graph.add_edge(267, 336, weight=93)
+    graph.add_edge(267, 336, weight=96)
 
     # 17TH COLUMN
     graph.add_node(331, pos=(17,56)) #int:71
-    graph.add_edge(331, 325, weight=99)
-    graph.add_edge(331, 330, weight=93)
+    graph.add_edge(331, 325, weight=100)
+    graph.add_edge(331, 330, weight=94)
     graph.add_edge(331, 332, weight=99)
-    graph.add_edge(331, 399, weight=98)
+    graph.add_edge(331, 399, weight=100)
 
     # 18TH COLUMN
     graph.add_node(332, pos=(18,53)) #int:72
-    graph.add_edge(332, 326, weight=96)
+    graph.add_edge(332, 326, weight=100)
     graph.add_edge(332, 331, weight=99)
     graph.add_edge(332, 333, weight=98)
-    graph.add_edge(332, 400, weight=91)
+    graph.add_edge(332, 400, weight=94)
 
     graph.add_node(269, pos=(18,28)) #int:9
     graph.add_edge(269, 267, weight=97)
-    graph.add_edge(269, 437, weight=93)
-    graph.add_edge(269, 413, weight=96)
+    graph.add_edge(269, 437, weight=100)
+    graph.add_edge(269, 413, weight=93)
 
     # 19TH COLUMN
     graph.add_node(333, pos=(19,48)) #int:73
     graph.add_edge(333, 332, weight=98)
     graph.add_edge(333, 334, weight=99)
-    graph.add_edge(333, 335, weight=97)
+    graph.add_edge(333, 335, weight=100)
     graph.add_edge(333, 401, weight=93)
 
     # 20TH COLUMN
     graph.add_node(335, pos=(20,45)) #int:75
-    graph.add_edge(335, 333, weight=97)
-    graph.add_edge(335, 334, weight=97)
+    graph.add_edge(335, 333, weight=100)
+    graph.add_edge(335, 334, weight=100)
     graph.add_edge(335, 336, weight=100)
-    graph.add_edge(335, 407, weight=95)
+    graph.add_edge(335, 407, weight=94)
 
 
 
     # 21ST COLUMN
     graph.add_node(437, pos=(21,22)) #int:177
-    graph.add_edge(437, 271, weight=96)
-    graph.add_edge(437, 269, weight=93)
+    graph.add_edge(437, 271, weight=100)
+    graph.add_edge(437, 269, weight=100)
 
     # 22ND COLUMN
     graph.add_node(336, pos=(22,42)) #int:76
-    graph.add_edge(336, 267, weight=93)
+    graph.add_edge(336, 267, weight=96)
     graph.add_edge(336, 335, weight=100)
-    graph.add_edge(336, 337, weight=96)
-    graph.add_edge(336, 413, weight=100)
+    graph.add_edge(336, 337, weight=98)
+    graph.add_edge(336, 413, weight=97)
 
     # 23RD COLUMN
     graph.add_node(324, pos=(23,66)) #int:64
-    graph.add_edge(324, 319, weight=95)
-    graph.add_edge(324, 325, weight=97)
-    graph.add_edge(324, 330, weight=90)
+    graph.add_edge(324, 319, weight=100)
+    graph.add_edge(324, 325, weight=98)
+    graph.add_edge(324, 330, weight=95)
 
     # 24TH COLUMN
     graph.add_node(334, pos=(24,53)) #int:74
     graph.add_edge(334, 333, weight=99)
-    graph.add_edge(334, 335, weight=97)
-    graph.add_edge(334, 409, weight=100)
+    graph.add_edge(334, 335, weight=100)
+    graph.add_edge(334, 409, weight=96)
 
     graph.add_node(450, pos=(24,31)) #int:190
     graph.add_edge(450, 414, weight=100)
@@ -407,23 +411,23 @@ def iligangraph(graph, start, end):
 
     # 25TH COLUMN
     graph.add_node(337, pos=(25,44)) #int:77
-    graph.add_edge(337, 329, weight=92)
-    graph.add_edge(337, 336, weight=96)
-    graph.add_edge(337, 408, weight=92)
+    graph.add_edge(337, 329, weight=99)
+    graph.add_edge(337, 336, weight=98)
+    graph.add_edge(337, 408, weight=96)
 
     graph.add_node(325, pos=(25,61)) #int:65
-    graph.add_edge(325, 324, weight=97)
+    graph.add_edge(325, 324, weight=98)
     graph.add_edge(325, 326, weight=99)
-    graph.add_edge(325, 331, weight=99)
+    graph.add_edge(325, 331, weight=100)
 
     graph.add_node(413, pos=(25,41)) #int:153
-    graph.add_edge(413, 269, weight=96)
-    graph.add_edge(413, 336, weight=100)
+    graph.add_edge(413, 269, weight=93)
+    graph.add_edge(413, 336, weight=97)
     graph.add_edge(413, 414, weight=100)
 
     # 26TH COLUMN
     graph.add_node(271, pos=(26,14)) #int:11
-    graph.add_edge(271, 437, weight=96)
+    graph.add_edge(271, 437, weight=100)
     graph.add_edge(271, 270, weight=100)
 
     # 27TH COLUMN
@@ -431,24 +435,24 @@ def iligangraph(graph, start, end):
     graph.add_edge(409, 326, weight=100)
     graph.add_edge(409, 329, weight=100)
     graph.add_edge(409, 410, weight=100)
-    graph.add_edge(409, 334, weight=100)
+    graph.add_edge(409, 334, weight=96)
 
     graph.add_node(326, pos=(27,58)) #int:66
     graph.add_edge(326, 325, weight=99)
-    graph.add_edge(326, 332, weight=96)
+    graph.add_edge(326, 332, weight=100)
     graph.add_edge(326, 409, weight=100)
     graph.add_edge(326, 412, weight=100)
 
     graph.add_node(329, pos=(27,53)) #int:69
-    graph.add_edge(329, 337, weight=92)
+    graph.add_edge(329, 337, weight=99)
     graph.add_edge(329, 409, weight=100)
-    graph.add_edge(329, 432, weight=99)
+    graph.add_edge(329, 432, weight=100)
 
     # 28TH COLUMN
     graph.add_node(319, pos=(28,69)) #int:59
-    graph.add_edge(319, 309, weight=92)
-    graph.add_edge(319, 324, weight=95)
-    graph.add_edge(319, 320, weight=94)
+    graph.add_edge(319, 309, weight=97)
+    graph.add_edge(319, 324, weight=100)
+    graph.add_edge(319, 320, weight=99)
 
     graph.add_node(416, pos=(28,27)) #int:156
     graph.add_edge(416, 415, weight=100)
@@ -461,8 +465,8 @@ def iligangraph(graph, start, end):
 
     # 29TH COLUMN
     graph.add_node(408, pos=(29,42)) #int:148
-    graph.add_edge(408, 337, weight=92)
-    graph.add_edge(408, 451, weight=92)
+    graph.add_edge(408, 337, weight=96)
+    graph.add_edge(408, 451, weight=96)
 
     graph.add_node(410, pos=(29,54)) #int:150
     graph.add_edge(410, 409, weight=100)
@@ -470,21 +474,21 @@ def iligangraph(graph, start, end):
 
     graph.add_node(270, pos=(29,9)) #int:10
     graph.add_edge(270, 271, weight=100)
-    graph.add_edge(270, 431, weight=94)
+    graph.add_edge(270, 431, weight=98)
     graph.add_edge(270, 397, weight=99)
 
     graph.add_node(320, pos=(29,65)) #int:60
-    graph.add_edge(320, 319, weight=94)
-    graph.add_edge(320, 321, weight=94)
-    graph.add_edge(320, 322, weight=95)
+    graph.add_edge(320, 319, weight=99)
+    graph.add_edge(320, 321, weight=97)
+    graph.add_edge(320, 322, weight=98)
 
     # 30TH COLUMN
     graph.add_node(322, pos=(30,66)) #int:62
-    graph.add_edge(322, 320, weight=95)
-    graph.add_edge(322, 323, weight=100)
+    graph.add_edge(322, 320, weight=98)
+    graph.add_edge(322, 323, weight=98)
 
     graph.add_node(432, pos=(30,51)) #int:172
-    graph.add_edge(432, 329, weight=99)
+    graph.add_edge(432, 329, weight=100)
 
     graph.add_node(415, pos=(30,36)) #int:155
     graph.add_edge(415, 414, weight=100)
@@ -497,7 +501,7 @@ def iligangraph(graph, start, end):
 
     # 31ST COLUMN
     graph.add_node(321, pos=(31,62)) #int:61
-    graph.add_edge(321, 320, weight=94)
+    graph.add_edge(321, 320, weight=97)
     graph.add_edge(321, 323, weight=97)
 
     graph.add_node(411, pos=(31,58)) #int:151
@@ -506,42 +510,42 @@ def iligangraph(graph, start, end):
 
     # 32ND COLUMN
     graph.add_node(338, pos=(32,40)) #int:78
-    graph.add_edge(338, 339, weight=97)
-    graph.add_edge(338, 340, weight=100)
-    graph.add_edge(338, 451, weight=96)
+    graph.add_edge(338, 339, weight=96)
+    graph.add_edge(338, 340, weight=99)
+    graph.add_edge(338, 451, weight=97)
 
     # 33RD COLUMN
     graph.add_node(323, pos=(33,64)) #int:63
     graph.add_edge(323, 321, weight=97)
-    graph.add_edge(323, 322, weight=100)
+    graph.add_edge(323, 322, weight=98)
 
     graph.add_node(451, pos=(33,44)) #int:191
-    graph.add_edge(451, 408, weight=92)
-    graph.add_edge(451, 338, weight=96)
+    graph.add_edge(451, 408, weight=96)
+    graph.add_edge(451, 338, weight=97)
 
     # 34TH COLUMN
     graph.add_node(312, pos=(34,68)) #int:52
-    graph.add_edge(312, 310, weight=100)
+    graph.add_edge(312, 310, weight=98)
     graph.add_edge(312, 313, weight=100)
 
     graph.add_node(309, pos=(34,71)) #int:49
-    graph.add_edge(309, 300, weight=91)
-    graph.add_edge(309, 310, weight=94)
-    graph.add_edge(309, 319, weight=92)
+    graph.add_edge(309, 300, weight=94)
+    graph.add_edge(309, 310, weight=97)
+    graph.add_edge(309, 319, weight=97)
 
     graph.add_node(446, pos=(34,60)) #int:186
     graph.add_edge(446, 434, weight=100)
 
     graph.add_node(397, pos=(34,8)) #int:137
     graph.add_edge(397, 270, weight=99)
-    graph.add_edge(397, 272, weight=97)
-    graph.add_edge(397, 395, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(397, 272, weight=99)
+    graph.add_edge(397, 395, weight=99) # to recheck(added temporary weight = 0)
 
 
     # 35TH COLUMN
     graph.add_node(393, pos=(35,14)) #int:133
     graph.add_edge(393, 394, weight=100)
-    graph.add_edge(393, 439, weight=98)
+    graph.add_edge(393, 439, weight=100)
 
     # 36TH COLUMN
     graph.add_node(313, pos=(36,65)) #int:53
@@ -549,9 +553,9 @@ def iligangraph(graph, start, end):
     graph.add_edge(313, 311, weight=100)
 
     graph.add_node(310, pos=(36,69)) #int:50
-    graph.add_edge(310, 309, weight=94)
-    graph.add_edge(310, 312, weight=100)
-    graph.add_edge(310, 311, weight=100)
+    graph.add_edge(310, 309, weight=97)
+    graph.add_edge(310, 312, weight=98)
+    graph.add_edge(310, 311, weight=96)
 
     # 37TH COLUMN
     graph.add_node(394, pos=(37,13)) #int:134
@@ -560,7 +564,7 @@ def iligangraph(graph, start, end):
     graph.add_edge(394, 440, weight=100)
 
     graph.add_node(439, pos=(37,18)) #int:179
-    graph.add_edge(439, 393, weight=98)
+    graph.add_edge(439, 393, weight=100)
     graph.add_edge(439, 440, weight=100)
 
     graph.add_node(315, pos=(37,63)) #int:55
@@ -568,22 +572,22 @@ def iligangraph(graph, start, end):
     graph.add_edge(315, 434, weight=100)
 
     graph.add_node(339, pos=(37,53)) #int:79
-    graph.add_edge(339, 327, weight=99)
-    graph.add_edge(339, 338, weight=97)
+    graph.add_edge(339, 327, weight=100)
+    graph.add_edge(339, 338, weight=96)
 
 
     # 38TH COLUMN
     graph.add_node(327, pos=(38,54)) #int:67
-    graph.add_edge(327, 339, weight=99)
+    graph.add_edge(327, 339, weight=100)
 
     graph.add_node(311, pos=(38,66)) #int:51
-    graph.add_edge(311, 310, weight=100)
+    graph.add_edge(311, 310, weight=96)
     graph.add_edge(311, 313, weight=100)
     graph.add_edge(311, 314, weight=100)
 
     graph.add_node(272, pos=(38,5)) #int:12
-    graph.add_edge(272, 396, weight=95)
-    graph.add_edge(272, 397, weight=97)
+    graph.add_edge(272, 396, weight=98)
+    graph.add_edge(272, 397, weight=99)
 
     graph.add_node(440, pos=(38,17)) #int:180
     graph.add_edge(440, 394, weight=100)
@@ -591,8 +595,8 @@ def iligangraph(graph, start, end):
     graph.add_edge(440, 441, weight=100)
 
     graph.add_node(431, pos=(38,25)) #int:171
-    graph.add_edge(431, 391, weight=97)
-    graph.add_edge(431, 270, weight=94)
+    graph.add_edge(431, 391, weight=100)
+    graph.add_edge(431, 270, weight=98)
 
     graph.add_node(395, pos=(38,12)) #int:135
     graph.add_edge(395, 394, weight=100)
@@ -601,8 +605,8 @@ def iligangraph(graph, start, end):
 
     # 39TH COLUMN
     graph.add_node(340, pos=(39,43)) #int:80
-    graph.add_edge(340, 338, weight=100)
-    graph.add_edge(340, 341, weight=95)
+    graph.add_edge(340, 338, weight=99)
+    graph.add_edge(340, 341, weight=98)
 
     graph.add_node(316, pos=(39,59)) #int:56
     graph.add_edge(316, 434, weight=100)
@@ -614,9 +618,9 @@ def iligangraph(graph, start, end):
     graph.add_edge(314, 317, weight=100)
 
     graph.add_node(300, pos=(39,72)) #int:40
-    graph.add_edge(300, 298, weight=85)
-    graph.add_edge(300, 309, weight=91)
-    graph.add_edge(300, 301, weight=85)
+    graph.add_edge(300, 298, weight=95)
+    graph.add_edge(300, 309, weight=94)
+    graph.add_edge(300, 301, weight=92)
 
     graph.add_node(441, pos=(39,16)) #int:181
     graph.add_edge(441, 395, weight=100)
@@ -624,31 +628,31 @@ def iligangraph(graph, start, end):
     graph.add_edge(441, 453, weight=99)
 
     graph.add_node(452, pos=(39,11)) #int:192
-    graph.add_edge(452, 397, weight=100)
+    graph.add_edge(452, 397, weight=99)
     graph.add_edge(452, 395, weight=100)
-    graph.add_edge(452, 453, weight=99)
+    graph.add_edge(452, 453, weight=98)
 
     graph.add_node(391, pos=(39,25)) #int:131
-    graph.add_edge(391, 390, weight=96)
+    graph.add_edge(391, 390, weight=99)
     graph.add_edge(391, 389, weight=99)
-    graph.add_edge(391, 431, weight=97)
+    graph.add_edge(391, 431, weight=100)
 
     # 40TH COLUMN
     graph.add_node(301, pos=(40,71)) #int:41
-    graph.add_edge(301, 300, weight=85)
-    graph.add_edge(301, 302, weight=96)
-    graph.add_edge(301, 299, weight=97)
+    graph.add_edge(301, 300, weight=92)
+    graph.add_edge(301, 302, weight=100)
+    graph.add_edge(301, 299, weight=100)
 
     graph.add_node(328, pos=(40,56)) #int:68
     graph.add_edge(328, 318, weight=100)
 
     graph.add_node(453, pos=(40,16)) #int:193
     graph.add_edge(453, 441, weight=99)
-    graph.add_edge(453, 452, weight=99)
+    graph.add_edge(453, 452, weight=98)
 
     graph.add_node(390, pos=(40,27)) #int:130
-    graph.add_edge(390, 358, weight=99)
-    graph.add_edge(390, 391, weight=96)
+    graph.add_edge(390, 358, weight=100)
+    graph.add_edge(390, 391, weight=99)
 
     # 41ST COLUMN
     graph.add_node(317, pos=(41,60)) #int:57
@@ -663,7 +667,7 @@ def iligangraph(graph, start, end):
 
     # 42ND COLUMN
     graph.add_node(389, pos=(42,24)) #int:129
-    graph.add_edge(389, 358, weight=97)
+    graph.add_edge(389, 358, weight=100)
     graph.add_edge(389, 391, weight=99)
 
     graph.add_node(304, pos=(42,65)) #int:44
@@ -678,7 +682,7 @@ def iligangraph(graph, start, end):
     graph.add_edge(358, 389, weight=97)
 
     graph.add_node(341, pos=(43,46)) #int:81
-    graph.add_edge(341, 340, weight=100) #these two line are possible to be removed. to recheck(added temporary weight = 0)
+    graph.add_edge(341, 340, weight=98) #these two line are possible to be removed. to recheck(added temporary weight = 0)
     graph.add_edge(341, 342, weight=100)
 
     graph.add_node(318, pos=(43,57)) #int:58
@@ -698,13 +702,13 @@ def iligangraph(graph, start, end):
     graph.add_node(356, pos=(44,27)) #int:96
     graph.add_edge(356, 357, weight=100)
     graph.add_edge(356, 424, weight=100)
-    graph.add_edge(356, 425, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(356, 353, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(356, 425, weight=100)
+    graph.add_edge(356, 353, weight=100)# to recheck(added temporary weight = 0)
 
     graph.add_node(353, pos=(44,28)) #int:93
     graph.add_edge(353, 350, weight=100)
     graph.add_edge(353, 354, weight=100)
-    graph.add_edge(353, 356, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(353, 356, weight=100)
     graph.add_edge(353, 388, weight=100)
 
     graph.add_node(350, pos=(44,33)) #int:90
@@ -724,38 +728,37 @@ def iligangraph(graph, start, end):
 
     graph.add_node(342, pos=(44,45)) #int:82
     graph.add_edge(342, 341, weight=100)
-    graph.add_edge(342, 346, weight=97)
+    graph.add_edge(342, 346, weight=100)
     graph.add_edge(342, 343, weight=99)
 
     graph.add_node(424, pos=(44,25)) #int:164
     graph.add_edge(424, 356, weight=100)
-    graph.add_edge(424, 359, weight=99)
+    graph.add_edge(424, 359, weight=100)
 
     # 45TH COLUMN
     graph.add_node(305, pos=(45,58)) #int:45
-    graph.add_edge(305, 307, weight=97)
+    graph.add_edge(305, 307, weight=100)
     graph.add_edge(305, 304, weight=100)
 
     graph.add_node(298, pos=(45,74)) #int:38
-    graph.add_edge(298, 297, weight=90)
+    graph.add_edge(298, 297, weight=98)
     graph.add_edge(298, 299, weight=95)
-    graph.add_edge(298, 300, weight=85)
+    graph.add_edge(298, 300, weight=95)
 
     # 46TH COLUMN
     graph.add_node(306, pos=(46,67)) #int:46
     graph.add_edge(306, 303, weight=100)
     graph.add_edge(306, 304, weight=100)
     graph.add_edge(306, 308, weight=100)
-    graph.add_edge(306, 336, weight=100)
 
     graph.add_node(443, pos=(46,39)) #int:183
-    graph.add_edge(443, 444, weight=100) # to recheck
-    graph.add_edge(443, 348, weight=99)
+    graph.add_edge(443, 444, weight=100)
+    graph.add_edge(443, 348, weight=100)
     graph.add_edge(443, 442, weight=100)
 
     # 47TH COLUMN
     graph.add_node(303, pos=(47,70)) #int:43
-    graph.add_edge(303, 299, weight=99)
+    graph.add_edge(303, 299, weight=100)
     graph.add_edge(303, 302, weight=100)
     graph.add_edge(303, 306, weight=100)
 
@@ -786,13 +789,13 @@ def iligangraph(graph, start, end):
     graph.add_edge(352, 449, weight=100)
 
     graph.add_node(343, pos=(49,45)) #int:83
-    graph.add_edge(343, 342, weight=99)
+    graph.add_edge(343, 342, weight=100)
     graph.add_edge(343, 347, weight=100)
     graph.add_edge(343, 445, weight=99)
 
     graph.add_node(308, pos=(49,64)) #int:48
     graph.add_edge(308, 306, weight=100)
-    graph.add_edge(308, 307, weight=99)
+    graph.add_edge(308, 307, weight=100)
 
     graph.add_node(444, pos=(49,40)) #int:184
     graph.add_edge(444, 349, weight=100) # to recheck(added temporary weight = 0)
@@ -810,24 +813,24 @@ def iligangraph(graph, start, end):
     graph.add_edge(347, 343, weight=100)
 
     graph.add_node(307, pos=(50,60)) #int:47
-    graph.add_edge(307, 308, weight=99)
-    graph.add_edge(307, 305, weight=97)
+    graph.add_edge(307, 308, weight=100)
+    graph.add_edge(307, 305, weight=99)
 
     graph.add_node(299, pos=(50,73)) #int:39
     graph.add_edge(299, 298, weight=95)
-    graph.add_edge(299, 435, weight=99)
-    graph.add_edge(299, 301, weight=97)
+    graph.add_edge(299, 435, weight=100)
+    graph.add_edge(299, 301, weight=85)
     graph.add_edge(299, 303, weight=99)
 
     graph.add_node(396, pos=(50,3)) #int:136
     graph.add_edge(396, 273, weight=98)
-    graph.add_edge(396, 272, weight=95)
+    graph.add_edge(396, 272, weight=98)
 
 
     # 51ST COLUMN
     graph.add_node(359, pos=(51,25)) #int:99
     graph.add_edge(359, 357, weight=99)
-    graph.add_edge(359, 424, weight=99)
+    graph.add_edge(359, 424, weight=100)
 
     graph.add_node(349, pos=(51,41)) #int:89
     graph.add_edge(349, 447, weight=100)
@@ -840,7 +843,7 @@ def iligangraph(graph, start, end):
     graph.add_edge(447, 427, weight=100)
 
     graph.add_node(445, pos=(51,47)) #int:185
-    graph.add_edge(445, 344, weight=99)
+    graph.add_edge(445, 344, weight=100)
     graph.add_edge(445, 343, weight=99)
 
     # 52ND COLUMN
@@ -848,7 +851,7 @@ def iligangraph(graph, start, end):
     graph.add_edge(357, 356, weight=100)
     graph.add_edge(357, 359, weight=99)
     graph.add_edge(357, 355, weight=100)
-    graph.add_edge(357, 361, weight=99)
+    graph.add_edge(357, 361, weight=100)
 
     graph.add_node(355, pos=(52,28)) #int:95
     graph.add_edge(355, 351, weight=97)
@@ -856,19 +859,19 @@ def iligangraph(graph, start, end):
     graph.add_edge(355, 357, weight=100)
 
     graph.add_node(436, pos=(52,70)) #int:176
-    graph.add_edge(436, 306, weight=95)
+    graph.add_edge(436, 306, weight=99)
 
     graph.add_node(435, pos=(52,72)) #int:175
-    graph.add_edge(435, 299, weight=99)
-    graph.add_edge(435, 296, weight=99)
+    graph.add_edge(435, 299, weight=100)
+    graph.add_edge(435, 296, weight=96)
 
     # 53RD COLUMN
     graph.add_node(427, pos=(53,42)) #int:167
     graph.add_edge(427, 447, weight=100)
 
     graph.add_node(426, pos=(53,40)) #int:166
-    graph.add_edge(426, 351, weight = 3)
-    graph.add_edge(426, 349, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(426, 351, weight=100)
+    graph.add_edge(426, 349, weight=100)# to recheck(added temporary weight = 0)
 
     graph.add_node(273, pos=(53,2)) #int:13
     graph.add_edge(273, 396, weight=98)
@@ -879,59 +882,58 @@ def iligangraph(graph, start, end):
     graph.add_edge(276, 345, weight=100) # to recheck(added temporary weight = 0)
 
     graph.add_node(297, pos=(53,77)) #int:37
-    graph.add_edge(297, 298, weight=90)
-    graph.add_edge(297, 296, weight=99)
+    graph.add_edge(297, 298, weight=98)
+    graph.add_edge(297, 296, weight=100)
 
     graph.add_node(351, pos=(53,32)) #int:91
-    graph.add_edge(351, 426, weight = 3)
+    graph.add_edge(351, 426, weight=100)
     graph.add_edge(351, 352, weight=100)
     graph.add_edge(351, 355, weight=97)
 
     graph.add_node(344, pos=(53,48)) #int:84
-    graph.add_edge(344, 445, weight=99)
+    graph.add_edge(344, 445, weight=100)
 
     graph.add_node(362, pos=(53,24)) #int:102
-    graph.add_edge(362, 361, weight=99)
+    graph.add_edge(362, 361, weight=100)
     graph.add_edge(362, 363, weight=99)
 
     graph.add_node(361, pos=(53,27)) #int:101
-    graph.add_edge(361, 357, weight=99)
-    graph.add_edge(361, 362, weight=99)
+    graph.add_edge(361, 357, weight=100)
+    graph.add_edge(361, 362, weight=100)
     graph.add_edge(361, 367, weight=97)
     graph.add_edge(361, 366, weight=100)
 
     # 54TH COLUMN
     graph.add_node(296, pos=(54,76)) #int:36
-    graph.add_edge(296, 291, weight=96)
-    graph.add_edge(296, 297, weight=99)
-    graph.add_edge(296, 435, weight=99)
+    graph.add_edge(296, 291, weight=100)
+    graph.add_edge(296, 297, weight=100)
+    graph.add_edge(296, 435, weight=96)
 
     # 55TH COLUMN
     graph.add_node(367, pos=(55,39)) #int:107
     graph.add_edge(367, 361, weight=97)
     graph.add_edge(367, 368, weight=100)
-    graph.add_edge(367, 370, weight=99)
+    graph.add_edge(367, 370, weight=100)
 
     graph.add_node(274, pos=(55,1)) #int:14
     graph.add_edge(274, 273, weight=99)
-    graph.add_edge(274, 275, weight=98)
+    graph.add_edge(274, 275, weight=100)
 
     # 56TH COLUMN
     graph.add_node(366, pos=(56,26)) #int:106
     graph.add_edge(366, 361, weight=100)
     graph.add_edge(366, 365, weight=100)
-    graph.add_edge(366, 368, weight=99)
+    graph.add_edge(366, 368, weight=100)
 
     graph.add_node(363, pos=(56,23)) #int:103
     graph.add_edge(363, 362, weight=99)
-    graph.add_edge(363, 364, weight=99)
-
+    graph.add_edge(363, 364, weight=100)
 
     # 57TH COLUMN
     graph.add_node(275, pos=(57,6)) #int:15
-    graph.add_edge(275, 345, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(275, 274, weight=98)
-    graph.add_edge(275, 277, weight=97)
+    graph.add_edge(275, 345, weight=100)
+    graph.add_edge(275, 274, weight=100)
+    graph.add_edge(275, 277, weight=100)
 
     graph.add_node(434, pos=(37,62)) #int:174
     graph.add_edge(434, 446, weight=100)
@@ -940,17 +942,17 @@ def iligangraph(graph, start, end):
 
     graph.add_node(370, pos=(57,46)) #int:110
     graph.add_edge(370, 371, weight=100)
-    graph.add_edge(370, 367, weight=99)
+    graph.add_edge(370, 367, weight=100)
 
     # 58TH COLUMN
     graph.add_node(368, pos=(58,38)) #int:108
     graph.add_edge(368, 367, weight=100)
     graph.add_edge(368, 369, weight=100)
-    graph.add_edge(368, 366, weight=99)
-    graph.add_edge(368, 371, weight=99)
+    graph.add_edge(368, 366, weight=100)
+    graph.add_edge(368, 371, weight=100)
 
     graph.add_node(364, pos=(58,24)) #int:104
-    graph.add_edge(364, 363, weight=99)
+    graph.add_edge(364, 363, weight=100)
     graph.add_edge(364, 433, weight=100)
     graph.add_edge(364, 365, weight=100)
 
@@ -961,19 +963,19 @@ def iligangraph(graph, start, end):
     graph.add_edge(365, 369, weight=99)
 
     graph.add_node(291, pos=(59,75)) #int:31
-    graph.add_edge(291, 478, weight=97)
-    graph.add_edge(291, 296, weight=96)
+    graph.add_edge(291, 478, weight=100)
+    graph.add_edge(291, 296, weight=100)
 
     # 60TH COLUMN
     graph.add_node(369, pos=(60,37)) #int:109
-    graph.add_edge(369, 372, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(369, 365, weight=100) # to recheck(added temporary weight = 0)
+    graph.add_edge(369, 372, weight=100)
+    graph.add_edge(369, 365, weight=99)
     graph.add_edge(369, 368, weight=100) # to recheck(added temporary weight = 0)
 
     graph.add_node(371, pos=(60,47)) #int:111
     graph.add_edge(371, 370, weight=100)
     graph.add_edge(371, 372, weight=100)
-    graph.add_edge(371, 368, weight=99)
+    graph.add_edge(371, 368, weight=100)
 
     graph.add_node(433, pos=(60,23)) #int:173
     graph.add_edge(433, 430, weight=100)
@@ -982,12 +984,12 @@ def iligangraph(graph, start, end):
 
     # 61ST COLUMN
     graph.add_node(277, pos=(61,15)) #int:17
-    graph.add_edge(277, 275, weight=97)
-    graph.add_edge(277, 278, weight=98)
+    graph.add_edge(277, 275, weight=100)
+    graph.add_edge(277, 278, weight=100)
 
     graph.add_node(478, pos=(61,74)) #int:32
-    graph.add_edge(478, 290, weight=97)
-    graph.add_edge(478, 291, weight=97)
+    graph.add_edge(478, 290, weight=100)
+    graph.add_edge(478, 291, weight=100)
 
     graph.add_node(430, pos=(61,22)) #int:170
     graph.add_edge(430, 429, weight=100)
@@ -995,7 +997,7 @@ def iligangraph(graph, start, end):
 
     graph.add_node(374, pos=(61,26)) #int:114
     graph.add_edge(374, 375, weight=100)
-    graph.add_edge(374, 380, weight=99)
+    graph.add_edge(374, 380, weight=100)
 
     graph.add_node(372, pos=(61,49)) #int:112
     graph.add_edge(372, 371, weight=100)
@@ -1004,13 +1006,12 @@ def iligangraph(graph, start, end):
 
     # 62ND COLUMN
     graph.add_node(429, pos=(62,21)) #int:169
-    graph.add_edge(429, 279, weight=98)
+    graph.add_edge(429, 279, weight=99)
     graph.add_edge(429, 430, weight=100)
 
     graph.add_node(290, pos=(62,73)) #int:30
-    graph.add_edge(290, 478, weight=97)
-    graph.add_edge(290, 289, weight=95)
-
+    graph.add_edge(290, 478, weight=100)
+    graph.add_edge(290, 289, weight=100)
 
     # 63RD COLUMN
     graph.add_node(375, pos=(63,24)) #int:115
@@ -1019,19 +1020,19 @@ def iligangraph(graph, start, end):
     graph.add_edge(375, 280, weight=100)
 
     graph.add_node(279, pos=(63,20)) #int:19
-    graph.add_edge(279, 429, weight=98)
+    graph.add_edge(279, 429, weight=99)
     graph.add_edge(279, 280, weight=100)
-    graph.add_edge(279, 278, weight=99)
+    graph.add_edge(279, 278, weight=100)
 
     graph.add_node(278, pos=(63,19)) #int:18
-    graph.add_edge(278, 277, weight=98)
-    graph.add_edge(278, 279, weight=99)
+    graph.add_edge(278, 277, weight=100)
+    graph.add_edge(278, 279, weight=100)
 
 
     # 64TH COLUMN
     graph.add_node(380, pos=(64,50)) #int:120
     graph.add_edge(380, 381, weight=100)
-    graph.add_edge(380, 374, weight=99)
+    graph.add_edge(380, 374, weight=100)
 
 
     # 65TH COLUMN
@@ -1041,37 +1042,36 @@ def iligangraph(graph, start, end):
     graph.add_edge(280, 375, weight=100)
 
     graph.add_node(377, pos=(65,29)) #int:117
-    graph.add_edge(377, 376, weight=98)
-    graph.add_edge(377, 383, weight=98)
-    graph.add_edge(377, 386, weight=95)
+    graph.add_edge(377, 376, weight=99)
+    graph.add_edge(377, 383, weight=99)
+    graph.add_edge(377, 386, weight=96)
 
     graph.add_node(376, pos=(65,26)) #int:116
-    graph.add_edge(376, 377, weight=98)
-    graph.add_edge(376, 387, weight=96)
-    graph.add_edge(376, 377, weight=98) #kindly add weight
+    graph.add_edge(376, 377, weight=99)
+    graph.add_edge(376, 387, weight=95)
+    graph.add_edge(376, 377, weight=99)#kindly add weight
 
 
     # 66TH COLUMN
     graph.add_node(383, pos=(66,42)) #int:123
     graph.add_edge(383, 382, weight=100)
-    graph.add_edge(383, 386, weight=98)
+    graph.add_edge(383, 386, weight=100)
     graph.add_edge(383, 377, weight=98)
 
 
     graph.add_node(382, pos=(66,51)) #int:121
     graph.add_edge(382, 381, weight=100)
     graph.add_edge(382, 383, weight=100)
-    graph.add_edge(382, 385, weight=99)
+    graph.add_edge(382, 385, weight=100)
 
     graph.add_node(381, pos=(66,46)) #int:122
     graph.add_edge(381, 380, weight=100)
     graph.add_edge(381, 382, weight=100)
-    graph.add_edge(381, 384, weight=100)
+    graph.add_edge(381, 384, weight=99)
 
     graph.add_node(289, pos=(66,71)) #int:29
-    graph.add_edge(289, 290, weight=95)
+    graph.add_edge(289, 290, weight=100)
     graph.add_edge(289, 476, weight=99)
-    graph.add_edge(289, 423, weight=99)
 
 
     # 67TH COLUMN
@@ -1082,7 +1082,7 @@ def iligangraph(graph, start, end):
 
     # 68TH COLUMN
     graph.add_node(423, pos=(68,69)) #int:163
-    graph.add_edge(423, 289, weight=99)
+    graph.add_edge(423, 289, weight=100)
     graph.add_edge(423, 422, weight=100)
 
     graph.add_node(428, pos=(68,26)) #int:168
@@ -1092,40 +1092,32 @@ def iligangraph(graph, start, end):
 
     # 69TH COLUMN
     graph.add_node(422, pos=(69,68)) #int:162
-    graph.add_edge(422, 477, weight=96)
-    graph.add_edge(422, 423, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(422, 288, weight=90)
+    graph.add_edge(422, 477, weight=100)
 
     graph.add_node(386, pos=(69,43)) #int:126
-    graph.add_edge(386, 383, weight=98)
+    graph.add_edge(386, 383, weight=100)
     graph.add_edge(386, 387, weight=100)
-    graph.add_edge(386, 377, weight=95)
-
+    graph.add_edge(386, 377, weight=96)
 
     # 70TH COLUMN
     graph.add_node(421, pos=(70,62)) #int:161
     graph.add_edge(421, 438, weight=100)
-    graph.add_edge(421, 476, weight=99)
-
 
     # 71ST COLUMN
     graph.add_node(438, pos=(71,57)) #int:178
     graph.add_edge(438, 287, weight=97)
-    graph.add_edge(438, 421, weight=100)
 
     graph.add_node(477, pos=(71,63)) #int:160
-    graph.add_edge(477, 422, weight=96)
-    graph.add_edge(477, 419, weight=100) # to recheck(added temporary weight = 0) kindly add weight
+    graph.add_edge(477, 422, weight=100)
 
 
     # 72ND COLUMN
     graph.add_node(287, pos=(72,54)) #int:27
-    graph.add_edge(287, 438, weight=97)
     graph.add_edge(287, 379, weight=97)
 
     graph.add_node(387, pos=(72,41)) #int:127
     graph.add_edge(387, 282, weight=99)
-    graph.add_edge(387, 376, weight=96)
+    graph.add_edge(387, 376, weight=95)
     graph.add_edge(387, 386, weight=100)
 
 
@@ -1136,22 +1128,20 @@ def iligangraph(graph, start, end):
     graph.add_edge(282, 387, weight=99)
 
     graph.add_node(419, pos=(73,63)) #int:159
-    graph.add_edge(419, 418, weight=88)
-    graph.add_edge(419, 477, weight=93)
+    graph.add_edge(419, 477, weight=100)
 
     graph.add_node(385, pos=(73,47)) #int:125
     graph.add_edge(385, 384, weight=100)
     graph.add_edge(385, 283, weight=100)
-    graph.add_edge(385, 382, weight=99)
+    graph.add_edge(385, 382, weight=100)
 
     graph.add_node(379, pos=(73,55)) #int:119
-    graph.add_edge(379, 479, weight=100)
-    graph.add_edge(379, 287, weight=97)
+    graph.add_edge(379, 479, weight=98)
 
 
     # 74TH COLUMN
     graph.add_node(384, pos=(74,53)) #int:124
-    graph.add_edge(384, 381, weight=100)
+    graph.add_edge(384, 381, weight=99)
     graph.add_edge(384, 385, weight=100)
 
 
@@ -1161,57 +1151,46 @@ def iligangraph(graph, start, end):
     graph.add_edge(281, 283, weight=100)
 
     graph.add_node(288, pos=(75,68)) #int:28
-    graph.add_edge(288, 422, weight=90)
-    graph.add_edge(288, 417, weight=90)
+    graph.add_edge(288, 422, weight=100)
+    graph.add_edge(288, 417, weight=99)
 
 
     # 76TH COLUMN
     graph.add_node(283, pos=(76,44)) #int:23
     graph.add_edge(283, 281, weight=100)
-    graph.add_edge(283, 285, weight=99)
+    graph.add_edge(283, 285, weight=96)
     graph.add_edge(283, 385, weight=100)
 
     graph.add_node(418, pos=(76,63)) #int:158
-    graph.add_edge(418, 480, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(418, 373, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(418, 419, weight=88)
-    graph.add_edge(418, 417, weight=96)
+    graph.add_edge(418, 419, weight=97)
 
 
     # 77TH COLUMN
     graph.add_node(479, pos=(77,55)) #int:33
-    graph.add_edge(479, 480, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(479, 379, weight=100)
-    graph.add_edge(479, 454, weight=99)
+    graph.add_edge(479, 454, weight=100)
 
 
     graph.add_node(417, pos=(77,63)) #int:157
-    graph.add_edge(417, 286, weight=99)
-    graph.add_edge(417, 288, weight=90)
-    graph.add_edge(417, 418, weight=96)
-
+    graph.add_edge(417, 288, weight=97)
+    graph.add_edge(417, 418, weight=100)
 
     # 78TH COLUMN
     graph.add_node(454, pos=(78,54)) #int:194
-    graph.add_edge(454, 479, weight=99)
-    graph.add_edge(454, 284, weight=97)
+    graph.add_edge(454, 284, weight=100)
 
     graph.add_node(286, pos=(78,55)) #int:26
-    graph.add_edge(286, 284, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(286, 417, weight=99)
+    graph.add_edge(286, 417, weight=100)
 
 
     # 79TH COLUMN
     graph.add_node(285, pos=(79,54)) #int:25
-    graph.add_edge(285, 284, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(285, 283, weight=99)
+    graph.add_edge(285, 284, weight=100)
+    graph.add_edge(285, 283, weight=96)
 
 
     # 80TH COLUMN
     graph.add_node(284, pos=(80,55)) #int:24
-    graph.add_edge(284, 285, weight=98)
-    graph.add_edge(284, 286, weight=100) # to recheck(added temporary weight = 0)
-    graph.add_edge(284, 454, weight=97)
+    graph.add_edge(284, 286, weight=100)
 
 
     #ESTABLISHMENTS
@@ -1430,10 +1409,12 @@ def iligangraph(graph, start, end):
     graph.add_node(220, pos=(51,74)) #Palawan Pawnshop
 
     random_number = random.randint(3, 5)
+    print('random_number: ', random_number)
     djikstrapath = nx.dijkstra_path(graph, start, end)
     shortestpath = [p for p in nx.all_shortest_paths(graph, start, end)]
+    print('djikstrapath', djikstrapath)
+    print('shortestpath', shortestpath)
     possible_routes = shortestpath[:random_number]
-    
     routes = []
     # insert dijkstra routes first
     routes.append(djikstrapath)
@@ -1443,7 +1424,6 @@ def iligangraph(graph, start, end):
 
     routes = [list(route) for route in set(tuple(route) for route in routes)]
     route_with_establishments = []
-    print(routes)
     for route in routes:
         edge_establishments = []
         for node in range(len(route)):
@@ -1456,9 +1436,12 @@ def iligangraph(graph, start, end):
                 edge_establishments.append(get_establishment)
             except IndexError:
                 break
+        
         djik_estab = [estab for edge_estab in edge_establishments for estab in edge_estab]
         djik_estab = list(set(djik_estab))
+
         join_route_estab = [route, djik_estab]
+
         route_with_establishments.append(join_route_estab)
-    
+
     return route_with_establishments
