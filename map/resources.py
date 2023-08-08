@@ -1,5 +1,5 @@
 from import_export import resources
-from .models import Marker
+from map.models import Marker
 
 
 class MarkerResource(resources.ModelResource):
