@@ -4,7 +4,6 @@
 {% load crispy_forms_tags %}
 {% block content %}
     <div class="container">
-        {{ route|json_script:"route" }}
 
         {% if messages %}
             <ul class="messages">
@@ -28,16 +27,23 @@
                                     </div>
                                 </div>
                             </div>  
-                            {{ jsonMarkers|json_script:"jsonMarkers" }}
-
                             <form method="POST">
+                                <input type="hidden" name="csrfmiddlewaretoken" value="ktzIX6zdGAhusuPOK5bSHbzfabByXi0q8wu7YfkTX46vFvA5IQvrb9GXUZVqJVEx">
                                 {% csrf_token %}
+
                                 {{ form }}
-                                <button type="submit" class="btn btn-primary mb-3 ">Search</button>
+                                <button type="submit" class="btn btn-primary mb-3 ">Searches</button>
                             </form>
                             {% leaflet_map "leaflet" callback="window.leafletMarkers" %}
                         </div>
                     </div>  
+                </div>
+                <div class="row ">
+                    <form method="POST">
+                        {% csrf_token %}
+                        {{ view_estabs_form }}
+                        <button type="submit" class="btn btn-primary mb-3 ">View</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -115,18 +121,52 @@
     <script type="text/javascript" src="{% static 'leaflet/Control.Geocoder.js' %}"></script>
     <script type="text/javascript" src="{% static 'leaflet/leaflet.ajax.js' %}"></script>
     <script type="text/javascript" src="{% static 'leaflet/leaflet.ajax.min.js' %}"></script>
-    <script>
+    <script type='text/javascript'>
+        
         function leafletMarkers(map, options){
+            let jsonMarkers = {{ jsonMarkers|safe }}
+            $.ajax({
+                type: 'GET',
+                dataType: 'json',
+                url: 'http://127.0.0.1:8000/map/markers', success: function (result){
+                    
+                    let markers_arr = []
+                    let marker_arr = []
+                    markers_arr.push(result)
+                    let estab = markers_arr[0].filter(marker => {
+                        marker.type == `${jsonMarkers[0]}` ? marker_arr.push(marker) : null;
+                    })
+
+                    marker_arr.map(estab_type =>{
+                        (estab_type.type == "establishment" ? estab_types = "/static/images/establishment_icon.png" : null) || 
+                        (estab_type.type == "intersection" ? estab_types = "/static/images/intersection_icon.png" : null)  ||
+                        (estab_type.type == "start_dest" ? estab_types = "/static/images/start_dest_icon.png" : null) 
+                    })
+                    var greenIcon = L.icon({
+                        iconUrl: `${estab_types}`,
+                        iconSize:     [35, 95], // size of the icon
+                        iconAnchor:   [22, 94], // point of the icon which will correspond to marker's location
+                        popupAnchor:  [-3, -25] // point from which the popup should open relative to the iconAnchor
+                    });
+                    marker_arr.forEach(estab => {
+                        let marker = L.latLng(
+                            parseFloat(estab["latitude"]),
+                            parseFloat(estab["longitude"])
+                        )
+                        const latlngs = L.marker(marker, {icon: greenIcon}).addTo(map)
+                        latlngs.bindPopup(estab["name"]);//.openPopup();
+                    });
+                }
+            })
+
             var directions = []
             var establishments = []
-            
             // Map the edge of the graph
-            const jsonMarkers = JSON.parse(document.getElementById('jsonMarkers').textContent);
+
             const possible_paths = document.getElementById('possible_paths')  
             const route_establishments = document.getElementById('route_establishments')  
-            
-            let objectjsonMarkers = eval('(' + jsonMarkers + ')');
-            const arr_test = objectjsonMarkers.map(route => {directions.push(route)})
+
+            const arr_test = jsonMarkers.map(route => {directions.push(route)});
             // Iterate over each array in the directions variable
             for (var i = 0; i < directions.length; i++) {
                 
@@ -149,13 +189,28 @@
             }
             var buttons = possible_paths.getElementsByTagName('li');
             var divs = route_establishments.getElementsByTagName('div');
-            console.log(buttons.length);
             var polylineLayer = null;
             var markersLayer = null
             var currEstabBlock = null
             for (var i = 0; i < buttons.length; i++) {
                 console.log(buttons[i]);
                 buttons[i].addEventListener('click', function(ev) {
+                    var MarkerIcon = L.Icon.extend({
+                        options: {
+                            iconSize:     [38, 95],
+                            shadowSize:   [50, 64],
+                            iconAnchor:   [22, 94],
+                            shadowAnchor: [4, 62],
+                            popupAnchor:  [-3, -25]
+                        }
+                    });
+                    var estab_icon = new MarkerIcon({iconUrl: "/static/images/establishment_icon.png"}),
+                        intersec_icon = new MarkerIcon({iconUrl: "/static/images/intersection_icon.png"}),
+                        start_dest_icon = new MarkerIcon({iconUrl: "/static/images/start_dest_icon.png"});
+                    L.icon = function (options) {
+                        return new L.Icon(options);
+                    };
+
                     var markers = L.layerGroup().addTo(map);
 
                     if (polylineLayer) {
@@ -163,14 +218,18 @@
                         map.removeLayer(markersLayer)
                         currEstabBlock.style.display = "none"
                     }
+
                     var curr_estab = divs[ev.target.id]
                     curr_estab.style.display = "block"
                     // Establishments
                     directions[ev.target.id][1].forEach(marker => {
-                        var latlngs = L.marker([marker["lat"], marker["lng"]]).addTo(markers)
-                        latlngs.bindPopup(marker["category_level"].toString()).openPopup(); 
+                        var marker_icon = marker["type"] == "establishment" ? estab_icon : null ||
+                                          marker["type"] == "intersection" ? intersec_icon : null ||
+                                          marker["type"] == "start_dest" ? start_dest_icon : null
+                        console.log(marker_icon);
+                        var latlngs = L.marker([marker["lat"], marker["lng"]], {icon: marker_icon}).addTo(markers)
+                        latlngs.bindPopup(marker["name"].toString()).openPopup(); 
                     })
-
                     // Routes
                     // Create a new polyline layer using the provided coordinates
                     var polyline = L.polyline(directions[ev.target.id][0]).addTo(map);
@@ -180,7 +239,7 @@
                     markersLayer = markers
                     currEstabBlock = curr_estab
                 });
-            }
+            }  
         }
     </script>
 </div>
