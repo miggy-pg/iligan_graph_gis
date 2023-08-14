@@ -176,8 +176,8 @@
                 button_list.style.cursor = 'pointer';
                 
                 var establishment_container = document.createElement('div');
-                const unique_estab = directions[i][1].map(marker => marker.name)
-                establishment_container.textContent = `${[...new Set(unique_estab)]}`
+                
+                establishment_container.textContent = [...new Set(directions[i][1].map(marker =>  marker.name))]
                 establishment_container.style.color = "black";
                 establishment_container.style.width = '600px';
                 establishment_container.style.textAlign = 'left';
@@ -185,7 +185,53 @@
                 establishment_container.style.display = "none";
             
                 possible_paths.appendChild(button_list); // Append the div to the body or your desired container
+                
                 route_establishments.appendChild(establishment_container); // Append the div to the body or your desired container
+                
+                var curr_button;
+                button_list.addEventListener('click', function(ev) {
+                    curr_button = ev.target.id
+                })
+
+                const establishments = establishment_container.textContent.split(',');
+                establishments.forEach(establishment =>{
+                    const anchor = document.createElement('a');
+                    anchor.textContent = "  -> " + establishment.trim() + "   ";
+                    anchor.href = '#'; // Replace with your desired action
+
+                    anchor.addEventListener('click', function(ev) {
+                        event.preventDefault();
+
+                        var MarkerIcon = L.Icon.extend({
+                            options: {
+                                iconSize:     [38, 95],
+                                shadowSize:   [50, 64],
+                                iconAnchor:   [22, 94],
+                                shadowAnchor: [4, 62],
+                                popupAnchor:  [-3, -25]
+                            }
+                        });
+                        var estab_icon = new MarkerIcon({iconUrl: "/static/images/selected_establishment_icon.png"})
+                        L.icon = function (options) {
+                            return new L.Icon(options);
+                        };
+
+                        var selectedEstabMarkers = L.layerGroup().addTo(map);
+                        
+                        var establishmentName = event.target.textContent;
+                        var counter = 0
+                        var test = directions[curr_button][1].find(estab =>{
+                            if (establishmentName.includes(estab.name)){
+                                var popupSelectedEstab = L.marker([estab["lat"], estab["lng"]], {icon: estab_icon}).addTo(selectedEstabMarkers)
+                                popupSelectedEstab.bindPopup(estab["name"].toString()).openPopup(); 
+
+                            }
+                        })
+
+
+                    });
+                    establishment_container.appendChild(anchor);
+                })
             }
             var buttons = possible_paths.getElementsByTagName('li');
             var divs = route_establishments.getElementsByTagName('div');
@@ -193,7 +239,6 @@
             var markersLayer = null
             var currEstabBlock = null
             for (var i = 0; i < buttons.length; i++) {
-                console.log(buttons[i]);
                 buttons[i].addEventListener('click', function(ev) {
                     var MarkerIcon = L.Icon.extend({
                         options: {
@@ -226,13 +271,12 @@
                         var marker_icon = marker["type"] == "establishment" ? estab_icon : null ||
                                           marker["type"] == "intersection" ? intersec_icon : null ||
                                           marker["type"] == "start_dest" ? start_dest_icon : null
-                        console.log(marker_icon);
                         var latlngs = L.marker([marker["lat"], marker["lng"]], {icon: marker_icon}).addTo(markers)
                         latlngs.bindPopup(marker["name"].toString()).openPopup(); 
                     })
                     // Routes
                     // Create a new polyline layer using the provided coordinates
-                    var polyline = L.polyline(directions[ev.target.id][0]).addTo(map);
+                    var polyline = L.polyline(directions[ev.target.id][0], {weight: 9}).addTo(map);
                     
                     // Update the currently displayed polyline layer
                     polylineLayer = polyline;

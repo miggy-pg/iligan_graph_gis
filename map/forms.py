@@ -4,12 +4,12 @@ from django import forms
 
 class MarkerForm(forms.Form):
     marker_start = forms.ModelChoiceField(
-        label="",
+        label="From",
         required=False,
         queryset=Marker.objects.filter(type="start_dest"),
     )
     marker_destination = forms.ModelChoiceField(
-        label="",
+        label="To",
         required=False,
         queryset=Marker.objects.filter(type="start_dest"),
     )

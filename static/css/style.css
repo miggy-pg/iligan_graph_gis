@@ -434,3 +434,14 @@ form {
 .establishments h2 {
   font-weight: bold;
 }
+
+label[for="id_marker_start"] {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-right: 0.3rem;
+}
+label[for="id_marker_destination"] {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-right: 0.3rem;
+}
