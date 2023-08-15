@@ -193,15 +193,17 @@
                     curr_button = ev.target.id
                 })
 
+                var selectEstabActive = null
+                const anchorArray = []
                 const establishments = establishment_container.textContent.split(',');
                 establishments.forEach(establishment =>{
                     const anchor = document.createElement('a');
                     anchor.textContent = "  -> " + establishment.trim() + "   ";
-                    anchor.href = '#'; // Replace with your desired action
-
+                    anchor.href = '#';
+                    anchorArray.push(anchor)
                     anchor.addEventListener('click', function(ev) {
                         event.preventDefault();
-
+                        
                         var MarkerIcon = L.Icon.extend({
                             options: {
                                 iconSize:     [38, 95],
@@ -216,21 +218,24 @@
                             return new L.Icon(options);
                         };
 
-                        var selectedEstabMarkers = L.layerGroup().addTo(map);
-                        
+                        if (selectEstabActive){
+                            map.removeLayer(selectEstabActive)
+                        }
+
                         var establishmentName = event.target.textContent;
-                        var counter = 0
-                        var test = directions[curr_button][1].find(estab =>{
-                            if (establishmentName.includes(estab.name)){
-                                var popupSelectedEstab = L.marker([estab["lat"], estab["lng"]], {icon: estab_icon}).addTo(selectedEstabMarkers)
-                                popupSelectedEstab.bindPopup(estab["name"].toString()).openPopup(); 
+                        var estabMarker = directions[curr_button][1].find(estab =>establishmentName.includes(estab.name))
 
-                            }
-                        })
+                        var popupSelectedEstab = L.marker([estabMarker["lat"], estabMarker["lng"]], {icon: estab_icon}).addTo(map)
+                        popupSelectedEstab.bindPopup(estabMarker["name"].toString()).openPopup(); 
 
-
+                        selectEstabActive = popupSelectedEstab
+                        
                     });
-                    establishment_container.appendChild(anchor);
+                    establishment_container.textContent = ""
+                    
+                    anchorArray.map(anchor => (
+                        establishment_container.appendChild(anchor)
+                    ))
                 })
             }
             var buttons = possible_paths.getElementsByTagName('li');
