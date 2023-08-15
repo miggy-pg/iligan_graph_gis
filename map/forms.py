@@ -46,3 +46,9 @@ class ViewEstablishments(forms.Form):
     estab_types = forms.ChoiceField(
         label="Select to view", required=False, choices=ESTABLISHMENT_CHOICES
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["estab_types"].widget.attrs.update(
+            {"class": "form-select mr-2 btn btn-light"}
+        )

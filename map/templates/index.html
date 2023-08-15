@@ -18,7 +18,7 @@
                 <div class="row">
                     <div class="col-sm-12">
                         <div class="banner_taital">
-                            <div class="about_taital">Search:</div>
+                            <div class="about_taital">Iligan Graph GIS <img src="{% static 'images/graph_network.png' %}" alt="graph network icon"/></div>
                             <div class="marker-card position-absolute" id="marker_card">
                                 <div class="row justify-content-center">
                                     <div class="w-25 py-5">
@@ -30,20 +30,21 @@
                             <form method="POST">
                                 <input type="hidden" name="csrfmiddlewaretoken" value="ktzIX6zdGAhusuPOK5bSHbzfabByXi0q8wu7YfkTX46vFvA5IQvrb9GXUZVqJVEx">
                                 {% csrf_token %}
-
                                 {{ form }}
-                                <button type="submit" class="btn btn-primary mb-3 ">Searches</button>
+                                <button type="submit" class="btn btn-primary mb-3 ">Search</button>
                             </form>
                             {% leaflet_map "leaflet" callback="window.leafletMarkers" %}
                         </div>
                     </div>  
                 </div>
                 <div class="row ">
-                    <form method="POST">
-                        {% csrf_token %}
-                        {{ view_estabs_form }}
-                        <button type="submit" class="btn btn-primary mb-3 ">View</button>
-                    </form>
+                    <div class="col-sm-12 mt-2">
+                        <form method="POST">
+                            {% csrf_token %}
+                            {{ view_estabs_form }}
+                            <button type="submit" class="btn btn-secondary btn-md">View</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -184,9 +185,9 @@
                 establishment_container.setAttribute('id', `${i}`);
                 establishment_container.style.display = "none";
             
-                possible_paths.appendChild(button_list); // Append the div to the body or your desired container
+                possible_paths.appendChild(button_list);
                 
-                route_establishments.appendChild(establishment_container); // Append the div to the body or your desired container
+                route_establishments.appendChild(establishment_container); 
                 
                 var curr_button;
                 button_list.addEventListener('click', function(ev) {
