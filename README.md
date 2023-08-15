@@ -33,7 +33,7 @@ This project aims to use neural networks to generate the shortest distance from 
 
 ## Contributing
 
-Contributions are welcome! If you'd like to contribute to the Livre De Cuisine website, please follow these steps:
+Contributions are welcome! If you'd like to contribute to the Iligan Graph GIS website, please follow these steps:
 
 1. Fork the repository.
 2. Create a new branch: `git checkout -b feature/your-feature-name`
